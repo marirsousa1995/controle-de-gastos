@@ -63,13 +63,15 @@ function gen(){const out=[],end=addM(cur(),S.hz);
  S.tx.forEach(t=>{const cr=t.forma=='c',n=cr?(t.par||1):1,c=S.cc.find(x=>x.id==t.cc),b0=t.pi||1;let pay=t.data;
   if(cr&&t.fv)pay=t.fv;else if(cr&&c){const d=+t.data.slice(8),m0=t.data.slice(0,7),y=d>+c.fe?addM(m0,1):m0;pay=addM(y,+c.ve>+c.fe?0:1)+'-'+p2(c.ve)}
   for(let i=0;i<n;i++){const dp=dadd(t.data,i),dx=dadd(pay,i);
-   out.push({k:'t'+t.id+'_'+i,desc:t.desc+(n>1||t.pt?' ('+(b0+i)+'/'+(t.pt||n)+')':''),v:t.valor/n,dts:{cp:dp,cx:dx},cp:cyc(dp),cx:cyc(dx),tipo:t.tipo,cat:t.cat||'Outros',banco:c?c.banco:'',cred:cr,data:t.data})}});
+   out.push({k:'t'+t.id+'_'+i,desc:t.desc+(n>1||t.pt?' ('+(b0+i)+'/'+(t.pt||n)+')':''),v:t.valor/n,dts:{cp:dp,cx:dx},cp:cyc(dp),cx:cyc(dx),tipo:t.tipo,cat:t.cat||'Outros',banco:c?c.banco:'',cred:cr,data:t.data,ct:cr?(c&&c.ct):t.ct})}});
  S.rec.forEach(r=>{let n=0;for(let m=r.ini;m<=end;m=addM(m,1)){if(r.n&&n>=r.n)break;n++;
   const dmo=S.dc>1&&r.dia>=S.dc?addM(m,-1):m,[y,o]=dmo.split('-').map(Number),dt=dmo+'-'+p2(Math.min(r.dia,dim(y,o)));
-  out.push({k:'r'+r.id+'_'+m,desc:r.desc,v:r.valor,dts:{cp:dt,cx:dt},cp:m,cx:m,tipo:r.tipo,cat:r.cat||'Fixas',banco:'',rec:1})}});
+  out.push({k:'r'+r.id+'_'+m,desc:r.desc,v:r.valor,dts:{cp:dt,cx:dt},cp:m,cx:m,tipo:r.tipo,cat:r.cat||'Fixas',banco:'',rec:1,ct:r.ct})}});
  return out}
 const val=i=>S.ov[i.k]??i.v;
-const pend=i=>!S.pg[i.k]&&i.cx>=cur()&&!(!i.rec&&!i.cred&&i.data<=td());
+const acct=i=>S.ap.find(x=>x.id==i.ct);
+const pend=i=>{const a=acct(i);return!S.pg[i.k]&&i.cx>=cur()&&!(!i.rec&&!i.cred&&i.data<=td())&&!(a&&a.bd&&i.dts.cx<=a.bd)};
+const bal=(a,A)=>a.bd?a.saldo+A.filter(i=>i.ct==a.id&&!pend(i)&&i.dts.cx>a.bd).reduce((n,i)=>n+(i.tipo=='e'?1:-1)*val(i),0):a.saldo;
 const sum=(A,m,t)=>A.filter(i=>i[mode]==m&&i.tipo==t).reduce((a,i)=>a+val(i),0);
 
 /* Gráficos */
@@ -101,15 +103,15 @@ const pg=(k,v)=>{v?S.pg[k]=1:delete S.pg[k];save();draw()};
 function ovr(k){const i=gen().find(x=>x.k==k),a=prompt('Valor efetivo (deixe vazio para voltar ao previsto)',val(i));if(a===null)return;const v=num(a);if(a.trim()===''||isNaN(v))delete S.ov[k];else S.ov[k]=v;save();draw()}
 
 const V={};
-V.res=()=>{const A=gen(),res=S.ap.reduce((a,x)=>a+x.saldo,0),P=A.filter(pend),
+V.res=()=>{const A=gen(),res=S.ap.reduce((a,x)=>a+bal(x,A),0),P=A.filter(pend),
  com=P.filter(i=>i.tipo=='s').reduce((a,i)=>a+val(i),0),rc=P.filter(i=>i.tipo=='e').reduce((a,i)=>a+val(i),0),liv=res-com,
  g={},b={};
  A.filter(i=>i.tipo=='s'&&i[mode]==sm).forEach(i=>{g[i.cat]=(g[i.cat]||0)+val(i);if(i.cred)b[i.banco||'—']=(b[i.banco||'—']||0)+val(i)});
- const d=Object.entries(g).sort((a,b)=>b[1]-a[1]),ms=[0,1,2,3,4,5].map(n=>addM(sm,n));
+ const d=Object.entries(g).sort((a,b)=>b[1]-a[1]),ms=[0,1,2,3,4,5].map(n=>addM(sm,n)),eM=sum(A,sm,'e'),sM=sum(A,sm,'s');
  return`<div class=k><div><small>Reservas</small><b>${R(res)}</b></div><div><small>Comprometido</small><b class=bad>${R(com)}</b></div><div><small>Livre</small><b class="${liv>=0?'ok':'bad'}">${R(liv)}</b></div></div>
 <div class=k style="grid-template-columns:1fr 1fr"><div><small>A receber (entradas pendentes)</small><b class=ok>${R(rc)}</b></div><div><small>Livre projetado (livre + a receber)</small><b class="${liv+rc>=0?'ok':'bad'}">${R(liv+rc)}</b></div></div>
-<p class=mu style="font-size:12px;margin:0 0 12px">Livre = reservas − saídas pendentes, sem contar renda futura. Livre projetado soma também as entradas ainda não recebidas. Só entra na conta o que não está marcado como pago/recebido (✓ no Previsto).</p>
-<div class=card><div class=nav2><a onclick="sm=addM(sm,-1);draw()">‹</a><b>${MN(sm)} · ${mode=='cx'?'caixa':'competência'}<br><small class=mu>${rg(sm)}</small></b><a onclick="sm=addM(sm,1);draw()">›</a></div>${pie(d)}</div>
+<p class=mu style="font-size:12px;margin:0 0 12px">Reservas = saldo de cada conta (informado + lançamentos pagos/recebidos depois da data do saldo). Livre = reservas − saídas pendentes, sem contar renda futura. Livre projetado soma também as entradas ainda não recebidas. Só entra na conta o que não está marcado como pago/recebido (✓ no Previsto).</p>
+<div class=card><div class=nav2><a onclick="sm=addM(sm,-1);draw()">‹</a><b>${MN(sm)} · ${mode=='cx'?'caixa':'competência'}<br><small class=mu>${rg(sm)}</small></b><a onclick="sm=addM(sm,1);draw()">›</a></div><div class=k><div><small>Entradas</small><b class=ok>${R(eM)}</b></div><div><small>Saídas</small><b class=bad>${R(sM)}</b></div><div><small>Saldo do mês</small><b class="${eM>=sM?'ok':'bad'}">${R(eM-sM)}</b></div></div>${pie(d)}</div>
 <div class=card><h3>Evolução mensal</h3>${bars(ms,A)}</div>
 <div class=card><h3>Crédito por banco em ${MN(sm)}</h3>${Object.entries(b).map(([k,v])=>`<div class=it><span class=d>${esc(k)}</span><b>${R(v)}</b></div>`).join('')||'<span class=mu>Nenhum gasto no crédito.</span>'}</div>`};
 
@@ -122,34 +124,34 @@ V.prev=()=>{const A=gen(),c=cur();let mx=c,h='';A.forEach(i=>{if(i[mode]>mx)mx=i
 V.lan=()=>{const t=S.tx.find(x=>x.id==ed.tx)||{tipo:'s',forma:'d',data:td(),par:1};
  return`<div class=card><h3>${ed.tx?'Editar':'Novo'} lançamento</h3>${RD(t.tipo)}${I('ds','Descrição',t.desc)}${I('vl','Valor total (R$)',t.valor,'inputmode=decimal')}${I('dt','',t.data,'type=date')}
 <select id=fm>${O([['d','Débito / Pix / dinheiro'],['c','Crédito']],t.forma)}</select>
-<select id=cc>${O(S.cc.map(c=>[c.id,c.nome+' · '+c.banco]),t.cc)}</select>${I('pr','Parcelas (se crédito)',t.par,'type=number min=1')}${I('ct','Categoria',t.cat,'list=dl')}${DL()}
+<select id=cc>${O(S.cc.map(c=>[c.id,c.nome+' · '+c.banco]),t.cc)}</select><label class=mu>Conta (débito, Pix ou entrada; no crédito vale a conta do cartão)</label><select id=ct2>${O([['','— nenhuma —'],...S.ap.map(x=>[x.id,x.inst+' · '+x.tipo])],t.ct??(S.ap[0]||{}).id)}</select>${I('pr','Parcelas (se crédito)',t.par,'type=number min=1')}${I('ct','Categoria',t.cat,'list=dl')}${DL()}
 <button class=btn onclick=svTx()>Salvar lançamento</button>${CANCEL('tx')}</div>
 <div class=card><h3>Últimos lançamentos</h3>${[...S.tx].sort((a,b)=>b.data.localeCompare(a.data)).slice(0,40).map(t=>`<div class=it><span class=mu>${t.data.slice(8)}/${t.data.slice(5,7)}</span><span class=d>${esc(t.desc)}${t.forma=='c'?' 💳'+(t.par>1?' '+t.par+'x':''):''}</span><b class="${t.tipo=='s'?'bad':'ok'}">${R(t.valor)}</b><a onclick="edit('tx','${t.id}')">✎</a><a onclick="del('tx','${t.id}')">🗑</a></div>`).join('')||'<span class=mu>Nenhum lançamento.</span>'}</div>`};
 function svTx(){const v=num($('#vl').value);if(!$('#ds').value||!(v>0))return alert('Informe descrição e valor.');
- const o={id:ed.tx||uid(),tipo:TP(),desc:$('#ds').value,valor:v,data:$('#dt').value||td(),forma:$('#fm').value,cc:$('#cc').value,par:Math.max(1,+$('#pr').value||1),cat:$('#ct').value||'Outros'};
+ const o={id:ed.tx||uid(),tipo:TP(),desc:$('#ds').value,valor:v,data:$('#dt').value||td(),forma:$('#fm').value,cc:$('#cc').value,par:Math.max(1,+$('#pr').value||1),cat:$('#ct').value||'Outros',ct:$('#ct2').value};
  if(o.forma=='c'&&!S.cc.find(c=>c.id==o.cc))return alert('Cadastre um cartão na aba Cartões.');
  put('tx',{...(S.tx.find(x=>x.id==ed.tx)||{}),...o})}
 
 V.fix=()=>{const r=S.rec.find(x=>x.id==ed.rec)||{tipo:'s',ini:cur()};
- return`<div class=card><h3>${ed.rec?'Editar':'Nova'} conta fixa ou recorrente</h3>${RD(r.tipo)}${I('rd','Descrição (ex.: aluguel, salário)',r.desc)}${I('rv','Valor mensal (R$)',r.valor,'inputmode=decimal')}${I('rdia','Dia do mês',r.dia,'type=number min=1 max=31')}<label class=mu>Primeiro mês de referência</label>${I('ri','',r.ini,'type=month')}${I('rn','Parcelas restantes (vazio = sem fim)',r.n||'','type=number min=1')}${I('rc','Categoria',r.cat,'list=dl')}${DL()}
+ return`<div class=card><h3>${ed.rec?'Editar':'Nova'} conta fixa ou recorrente</h3>${RD(r.tipo)}${I('rd','Descrição (ex.: aluguel, salário)',r.desc)}${I('rv','Valor mensal (R$)',r.valor,'inputmode=decimal')}${I('rdia','Dia do mês',r.dia,'type=number min=1 max=31')}<label class=mu>Primeiro mês de referência</label>${I('ri','',r.ini,'type=month')}${I('rn','Parcelas restantes (vazio = sem fim)',r.n||'','type=number min=1')}<label class=mu>Conta que recebe ou paga</label><select id=rct>${O([['','— nenhuma —'],...S.ap.map(x=>[x.id,x.inst+' · '+x.tipo])],r.ct??(S.ap[0]||{}).id)}</select>${I('rc','Categoria',r.cat,'list=dl')}${DL()}
 <button class=btn onclick=svRec()>Salvar</button>${CANCEL('rec')}</div>
 <div class=card><h3>Cadastradas</h3>${LST('rec',r=>`${esc(r.desc)} <span class=mu>dia ${r.dia}${r.n?' · '+r.n+'x':''}</span> <b class="${r.tipo=='s'?'bad':'ok'}">${R(r.valor)}</b>`)}</div>
 <div class=card><h3>Horizonte</h3><p class=mu style="margin:0 0 8px;font-size:13px">Quantos meses à frente contar nas fixas sem fim.</p>${I('hz','',S.hz,'type=number min=1 onchange="S.hz=+this.value||12;save()"')}</div>`};
 function svRec(){const v=num($('#rv').value),d=+$('#rdia').value;if(!$('#rd').value||!(v>0)||!(d>=1&&d<=31))return alert('Informe descrição, valor e dia do mês.');
- put('rec',{id:ed.rec||uid(),tipo:TP(),desc:$('#rd').value,valor:v,dia:d,ini:$('#ri').value||cur(),n:+$('#rn').value||0,cat:$('#rc').value||'Fixas'})}
+ put('rec',{id:ed.rec||uid(),tipo:TP(),desc:$('#rd').value,valor:v,dia:d,ini:$('#ri').value||cur(),n:+$('#rn').value||0,cat:$('#rc').value||'Fixas',ct:$('#rct').value})}
 
-V.rsv=()=>{const a=S.ap.find(x=>x.id==ed.ap)||{},grp=f=>{const o={};S.ap.forEach(x=>o[x[f]||'—']=(o[x[f]||'—']||0)+x.saldo);return Object.entries(o).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class=it><span class=d>${esc(k)}</span><b>${R(v)}</b></div>`).join('')||'<span class=mu>—</span>'};
- return`<div class=card><h3>${ed.ap?'Editar':'Nova'} aplicação</h3>${I('ai','Instituição financeira',a.inst)}${I('at','Tipo (ex.: CDB, Tesouro, poupança)',a.tipo,'list=dt1')}<datalist id=dt1>${['Conta corrente','Poupança','CDB','Tesouro Direto','LCI/LCA','Fundo','Ações','FII','Previdência','Cripto'].map(x=>`<option>${x}</option>`).join('')}</datalist>${I('al','Liquidez (ex.: D+0, D+30, no vencimento)',a.liq,'list=dt2')}<datalist id=dt2>${['D+0','D+1','D+30','D+90','No vencimento','Sem liquidez'].map(x=>`<option>${x}</option>`).join('')}</datalist>${I('as','Saldo atual (R$)',a.saldo,'inputmode=decimal')}
+V.rsv=()=>{const A=gen(),a=S.ap.find(x=>x.id==ed.ap)||{},grp=f=>{const o={};S.ap.forEach(x=>o[x[f]||'—']=(o[x[f]||'—']||0)+bal(x,A));return Object.entries(o).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class=it><span class=d>${esc(k)}</span><b>${R(v)}</b></div>`).join('')||'<span class=mu>—</span>'};
+ return`<div class=card><h3>${ed.ap?'Editar':'Nova'} aplicação</h3>${I('ai','Instituição financeira',a.inst)}${I('at','Tipo (ex.: CDB, Tesouro, poupança)',a.tipo,'list=dt1')}<datalist id=dt1>${['Conta corrente','Poupança','CDB','Tesouro Direto','LCI/LCA','Fundo','Ações','FII','Previdência','Cripto'].map(x=>`<option>${x}</option>`).join('')}</datalist>${I('al','Liquidez (ex.: D+0, D+30, no vencimento)',a.liq,'list=dt2')}<datalist id=dt2>${['D+0','D+1','D+30','D+90','No vencimento','Sem liquidez'].map(x=>`<option>${x}</option>`).join('')}</datalist>${I('as','Saldo informado (R$)',a.saldo,'inputmode=decimal')}<label class=mu>Data do saldo: lançamentos pagos ou recebidos depois dela ajustam o saldo</label>${I('ab','',a.bd||td(),'type=date')}
 <button class=btn onclick=svAp()>Salvar aplicação</button>${CANCEL('ap')}</div>
-<div class=card><h3>Aplicações</h3>${LST('ap',x=>`${esc(x.inst)} <span class=mu>${esc(x.tipo||'')} · ${esc(x.liq||'')}</span> <b>${R(x.saldo)}</b>`)}</div>
-<div class=card><h3>Total: ${R(S.ap.reduce((s,x)=>s+x.saldo,0))}</h3><b>Por instituição</b>${grp('inst')}<br><b>Por tipo</b>${grp('tipo')}<br><b>Por liquidez</b>${grp('liq')}</div>`};
-function svAp(){const v=num($('#as').value);if(!$('#ai').value||isNaN(v))return alert('Informe a instituição e o saldo.');put('ap',{id:ed.ap||uid(),inst:$('#ai').value,tipo:$('#at').value,liq:$('#al').value,saldo:v})}
+<div class=card><h3>Aplicações</h3>${LST('ap',x=>`${esc(x.inst)} <span class=mu>${esc(x.tipo||'')} · ${esc(x.liq||'')}</span> <b>${R(bal(x,A))}</b><br><small class=mu>informado ${R(x.saldo)} em ${x.bd?dm(x.bd):'—'}</small>`)}</div>
+<div class=card><h3>Total: ${R(S.ap.reduce((n,x)=>n+bal(x,A),0))}</h3><b>Por instituição</b>${grp('inst')}<br><b>Por tipo</b>${grp('tipo')}<br><b>Por liquidez</b>${grp('liq')}</div>`};
+function svAp(){const v=num($('#as').value);if(!$('#ai').value||isNaN(v))return alert('Informe a instituição e o saldo.');put('ap',{...(S.ap.find(x=>x.id==ed.ap)||{}),id:ed.ap||uid(),inst:$('#ai').value,tipo:$('#at').value,liq:$('#al').value,saldo:v,bd:$('#ab').value||td()})}
 
 V.cc=()=>{const c=S.cc.find(x=>x.id==ed.cc)||{};
- return`<div class=card><h3>${ed.cc?'Editar':'Novo'} cartão</h3>${I('cn','Nome (ex.: Visa final 1234, cartão virtual)',c.nome)}${I('cb','Banco',c.banco)}${I('cf','Dia de fechamento fatura',c.fe,'type=number min=1 max=31')}${I('cv','Dia de vencimento',c.ve,'type=number min=1 max=31')}
+ return`<div class=card><h3>${ed.cc?'Editar':'Novo'} cartão</h3>${I('cn','Nome (ex.: Visa final 1234, cartão virtual)',c.nome)}${I('cb','Banco',c.banco)}${I('cf','Dia de fechamento fatura',c.fe,'type=number min=1 max=31')}${I('cv','Dia de vencimento',c.ve,'type=number min=1 max=31')}<label class=mu>Conta que paga a fatura</label><select id=cct>${O([['','— nenhuma —'],...S.ap.map(x=>[x.id,x.inst+' · '+x.tipo])],c.ct)}</select>
 <button class=btn onclick=svCc()>Salvar cartão</button>${CANCEL('cc')}</div>
 <div class=card><h3>Cartões</h3>${LST('cc',c=>`${esc(c.nome)} <span class=mu>${esc(c.banco)} · fecha ${c.fe} · vence ${c.ve}</span>`)}</div>`};
-function svCc(){const f=+$('#cf').value,v=+$('#cv').value;if(!$('#cn').value||!$('#cb').value||!f||!v)return alert('Preencha nome, banco, fechamento e vencimento.');put('cc',{id:ed.cc||uid(),nome:$('#cn').value,banco:$('#cb').value,fe:f,ve:v})}
+function svCc(){const f=+$('#cf').value,v=+$('#cv').value;if(!$('#cn').value||!$('#cb').value||!f||!v)return alert('Preencha nome, banco, fechamento e vencimento.');put('cc',{id:ed.cc||uid(),nome:$('#cn').value,banco:$('#cb').value,fe:f,ve:v,ct:$('#cct').value})}
 
 V.dad=()=>`<div class=card><h3>Importar extrato ou fatura</h3><p class=mu style="margin:0 0 8px;font-size:13px">Fatura do Nubank (CSV) ou extrato do BRB (PDF). A leitura acontece no aparelho e você revisa antes de importar.</p><input type=file accept=".csv,.pdf,text/csv,application/pdf" onchange="importar(this)"></div>
 <div class=card><h3>Início do mês</h3><p class=mu style="margin:0 0 8px;font-size:13px">Dia em que o mês de referência começa. Com 20, o salário e os gastos a partir de 20/out entram em novembro. Use 1 para mês de calendário.</p>${I('dc','',S.dc,'type=number min=1 max=28 onchange="S.dc=Math.min(28,Math.max(1,+this.value||1));save();draw()"')}</div>
@@ -217,7 +219,7 @@ ${m.saldos.length?`<div class=card><h3>Saldos encontrados</h3>${m.saldos.map((s,
 function okImp(){let cid='';
  if(imp.card){let c=S.cc.find(x=>/nubank/i.test(x.banco));if(!c){const ve=+imp.fv.slice(8);c={id:uid(),nome:'Nubank',banco:'Nubank',fe:ve>7?ve-7:ve+23,ve};S.cc.push(c)}cid=c.id}
  imp.rows.filter(r=>r.on).forEach(r=>{const n=r.pt?r.pt-r.pi+1:1;S.tx.push({id:uid(),tipo:r.tipo,desc:r.desc,valor:r.v*n,data:r.dt,forma:imp.card?'c':'d',cc:cid,par:n,cat:r.cat||'Outros',h:r.h,...(r.pt?{pi:r.pi,pt:r.pt}:{}),...(imp.card?{fv:imp.fv}:{})})});
- imp.saldos.filter(x=>x.on).forEach(x=>{const a=S.ap.find(y=>y.inst==x.inst&&y.tipo==x.tipo);a?a.saldo=x.saldo:S.ap.push({id:uid(),inst:x.inst,tipo:x.tipo,liq:x.liq,saldo:x.saldo})});
+ imp.saldos.filter(x=>x.on).forEach(x=>{const a=S.ap.find(y=>y.inst==x.inst&&y.tipo==x.tipo);a?(a.saldo=x.saldo,a.bd=td()):S.ap.push({id:uid(),inst:x.inst,tipo:x.tipo,liq:x.liq,saldo:x.saldo,bd:td()})});
  imp=null;save();tab='prev';draw()}
 
 const T=[['res','Resumo'],['prev','Previsto'],['lan','Lançar'],['fix','Fixas'],['rsv','Reservas'],['cc','Cartões'],['dad','Dados']];
