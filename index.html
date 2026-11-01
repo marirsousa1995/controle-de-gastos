@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Gastos">
+<title>Controle de Gastos</title>
+<style>
+:root{--bg:#f1f3f0;--card:#fafbf9;--tx:#1c2430;--mu:#6b7683;--ac:#1f3a5f;--ok:#2e6b4f;--bad:#8e2f3c;--bd:#d9ded8}
+@media(prefers-color-scheme:dark){:root{--bg:#141a21;--card:#1c242d;--tx:#e6eaee;--mu:#93a0ad;--ac:#8fb3e0;--ok:#6fc39a;--bad:#e58a97;--bd:#2c3742}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 -apple-system,system-ui,sans-serif;padding:env(safe-area-inset-top) 0 calc(70px + env(safe-area-inset-bottom))}
+header{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;position:sticky;top:env(safe-area-inset-top);background:var(--bg);z-index:5}
+header b{font:600 19px Georgia,serif;color:var(--ac)}
+.seg button,nav button{border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:6px 11px;font:inherit}
+.seg button:first-child{border-radius:8px 0 0 8px}.seg button:last-child{border-radius:0 8px 8px 0}
+.on{background:var(--ac)!important;color:var(--bg)!important;border-color:var(--ac)!important}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;overflow-x:auto;gap:6px;background:var(--bg);border-top:1px solid var(--bd);padding:8px 8px calc(8px + env(safe-area-inset-bottom))}
+nav button{border-radius:16px;white-space:nowrap;flex:none}
+main{padding:0 14px;max-width:640px;margin:auto}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px;margin:0 0 12px}
+h3{margin:0 0 8px;font:600 16px Georgia,serif}
+input,select{width:100%;padding:10px;margin:0 0 8px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit}
+input[type=radio],input[type=checkbox]{width:auto;margin:0 6px 0 0}
+.row{display:flex;gap:16px;margin-bottom:8px}
+.btn{background:var(--ac);color:var(--bg);border:0;border-radius:8px;padding:11px;font:inherit;width:100%;margin:0 0 8px}
+.btn.s{background:none;color:var(--tx);border:1px solid var(--bd)}
+.mu{color:var(--mu)}.ok{color:var(--ok)}.bad{color:var(--bad)}
+.k{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px}
+.k div{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:9px}
+.k small{display:block;color:var(--mu);font-size:12px}.k b{font:600 15px Georgia,serif}
+.it{display:flex;gap:8px;align-items:center;padding:7px 0;border-top:1px solid var(--bd)}
+.it .d{flex:1;min-width:0}.it a{cursor:pointer;padding:0 4px}
+.pie{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.pie i,.mu i{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 5px 0 8px}
+summary{cursor:pointer;display:flex;gap:10px;flex-wrap:wrap}
+.nav2{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}.nav2 a{font-size:22px;padding:0 10px;cursor:pointer}
+@media print{.seg,nav,.noprint{display:none}header{position:static}}
+</style></head><body>
+<header><b>Controle de Gastos</b><div class="seg" id="seg"></div></header>
+<main id="v"></main><nav id="nav"></nav>
+<script>
+const K='cg1';let S;
+try{S=JSON.parse(localStorage.getItem(K))}catch(e){}
+S=Object.assign({ap:[],cc:[],tx:[],rec:[],pg:{},ov:{},hz:12},S||{});
+const save=()=>{try{localStorage.setItem(K,JSON.stringify(S))}catch(e){alert('Não foi possível salvar neste navegador.')}};
+const $=s=>document.querySelector(s),uid=()=>Math.random().toString(36).slice(2,9);
+const R=v=>(+v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const p2=n=>String(n).padStart(2,'0');
+const td=()=>{const d=new Date();return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate())};
+const cur=()=>td().slice(0,7);
+const addM=(m,n)=>{const[y,o]=m.split('-').map(Number),t=y*12+o-1+n;return Math.floor(t/12)+'-'+p2(t%12+1)};
+const MN=m=>{const[y,o]=m.split('-');return['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][o-1]+'/'+y.slice(2)};
+const num=s=>{s=String(s).trim();return s.includes(',')?parseFloat(s.replace(/\./g,'').replace(',','.')):parseFloat(s)};
+let tab='res',mode='cx',ed={},sm=cur();
+
+/* Gera todos os itens previstos (caixa = mês do pagamento; competência = mês da compra/obrigação) */
+function gen(){const out=[],end=addM(cur(),S.hz);
+ S.tx.forEach(t=>{const cr=t.forma=='c',n=cr?(t.par||1):1,c=S.cc.find(x=>x.id==t.cc);
+  for(let i=0;i<n;i++){const cp=addM(t.data.slice(0,7),i);let cx=cp,dia=t.data.slice(8);
+   if(cr&&c){const d=+t.data.slice(8),cy=d>+c.fe?addM(t.data.slice(0,7),1):t.data.slice(0,7);cx=addM(addM(cy,+c.ve>+c.fe?0:1),i);dia=p2(c.ve)}
+   out.push({k:'t'+t.id+'_'+i,desc:t.desc+(n>1?' ('+(i+1)+'/'+n+')':''),v:t.valor/n,cp,cx,dia,tipo:t.tipo,cat:t.cat||'Outros',banco:c?c.banco:'',cred:cr,data:t.data})}});
+ S.rec.forEach(r=>{let n=0;for(let m=r.ini;m<=end;m=addM(m,1)){if(r.n&&n>=r.n)break;n++;
+  out.push({k:'r'+r.id+'_'+m,desc:r.desc,v:r.valor,cp:m,cx:m,dia:p2(r.dia),tipo:r.tipo,cat:r.cat||'Fixas',banco:'',rec:1})}});
+ return out}
+const val=i=>S.ov[i.k]??i.v;
+const pend=i=>!S.pg[i.k]&&i.cx>=cur()&&!(!i.rec&&!i.cred&&i.data<=td());
+const sum=(A,m,t)=>A.filter(i=>i[mode]==m&&i.tipo==t).reduce((a,i)=>a+val(i),0);
+
+/* Gráficos */
+const PAL=['#1f3a5f','#8e2f3c','#2e6b4f','#b08a3e','#5f6f8f','#7a4f7a','#4f8f8f','#a0623a'];
+function pie(d){const t=d.reduce((a,x)=>a+x[1],0);if(!t)return'<p class=mu>Sem despesas neste mês.</p>';
+ let a=-Math.PI/2,s='<svg viewBox="-1 -1 2 2" width="150" height="150">',lg='';
+ d.forEach(([n,v],i)=>{const f=v/t,b=a+f*2*Math.PI,c=PAL[i%8];
+  s+=f>.999?`<circle r="1" fill="${c}"/>`:`<path d="M0 0L${Math.cos(a)} ${Math.sin(a)}A1 1 0 ${f>.5?1:0} 1 ${Math.cos(b)} ${Math.sin(b)}Z" fill="${c}"/>`;
+  lg+=`<div><i style="background:${c};margin-left:0"></i>${esc(n)} <b>${R(v)}</b> <span class=mu>${Math.round(f*100)}%</span></div>`;a=b});
+ return`<div class=pie>${s}</svg><div>${lg}</div></div>`}
+function bars(ms,A){const D=ms.map(m=>[m,sum(A,m,'s'),sum(A,m,'e')]),mx=Math.max(1,...D.flatMap(x=>[x[1],x[2]]));
+ let s=`<svg viewBox="0 0 ${ms.length*60} 140" width="100%">`;
+ D.forEach(([m,o,e],i)=>{const x=i*60+6,h1=o/mx*95,h2=e/mx*95;
+  s+=`<rect x="${x}" y="${108-h1}" width="22" height="${h1}" rx="2" fill="var(--bad)"/><rect x="${x+24}" y="${108-h2}" width="22" height="${h2}" rx="2" fill="var(--ok)"/><text x="${x+23}" y="125" text-anchor="middle" font-size="10" fill="var(--mu)">${MN(m)}</text>`});
+ return s+'</svg><div class=mu style="font-size:12px"><i style="background:var(--bad);margin-left:0"></i>Saídas<i style="background:var(--ok)"></i>Entradas</div>'}
+
+/* Helpers de formulário */
+const I=(id,ph,v,x)=>`<input id=${id} placeholder="${ph}" value="${esc(v)}" ${x||''}>`;
+const O=(a,s)=>a.map(([v,l])=>`<option value="${esc(v)}" ${v==s?'selected':''}>${esc(l)}</option>`).join('');
+const RD=t=>`<div class=row><label><input type=radio name=tp value=s ${t!='e'?'checked':''}>Saída</label><label><input type=radio name=tp value=e ${t=='e'?'checked':''}>Entrada</label></div>`;
+const DL=()=>`<datalist id=dl>${[...new Set(['Moradia','Alimentação','Transporte','Saúde','Lazer','Educação','Fé','Dívidas','Outros',...S.tx.map(t=>t.cat),...S.rec.map(r=>r.cat)].filter(Boolean))].map(c=>`<option>${esc(c)}</option>`).join('')}</datalist>`;
+const TP=()=>document.querySelector('[name=tp]:checked').value;
+const CANCEL=k=>ed[k]?`<button class="btn s" onclick="ed.${k}=null;draw()">Cancelar edição</button>`:'';
+const LST=(k,f)=>S[k].map(x=>`<div class=it><span class=d>${f(x)}</span><a onclick="edit('${k}','${x.id}')">✎</a><a onclick="del('${k}','${x.id}')">🗑</a></div>`).join('')||'<span class=mu>Nada cadastrado.</span>';
+function edit(k,id){ed[k]=id;draw();scrollTo(0,0)}
+function del(k,id){if(confirm('Excluir este item?')){S[k]=S[k].filter(x=>x.id!=id);save();draw()}}
+const put=(k,o)=>{const i=S[k].findIndex(x=>x.id==o.id);i<0?S[k].push(o):S[k][i]=o;ed[k]=null;save();draw()};
+const pg=(k,v)=>{v?S.pg[k]=1:delete S.pg[k];save();draw()};
+function ovr(k){const i=gen().find(x=>x.k==k),a=prompt('Valor efetivo (deixe vazio para voltar ao previsto)',val(i));if(a===null)return;const v=num(a);if(a.trim()===''||isNaN(v))delete S.ov[k];else S.ov[k]=v;save();draw()}
+
+const V={};
+V.res=()=>{const A=gen(),res=S.ap.reduce((a,x)=>a+x.saldo,0),P=A.filter(pend),
+ com=P.filter(i=>i.tipo=='s').reduce((a,i)=>a+val(i),0),rc=P.filter(i=>i.tipo=='e').reduce((a,i)=>a+val(i),0),liv=res-com,
+ g={},b={};
+ A.filter(i=>i.tipo=='s'&&i[mode]==sm).forEach(i=>{g[i.cat]=(g[i.cat]||0)+val(i);if(i.cred)b[i.banco||'—']=(b[i.banco||'—']||0)+val(i)});
+ const d=Object.entries(g).sort((a,b)=>b[1]-a[1]),ms=[0,1,2,3,4,5].map(n=>addM(sm,n));
+ return`<div class=k><div><small>Reservas</small><b>${R(res)}</b></div><div><small>Comprometido</small><b class=bad>${R(com)}</b></div><div><small>Livre</small><b class="${liv>=0?'ok':'bad'}">${R(liv)}</b></div></div>
+<p class=mu style="font-size:12px;margin:0 0 12px">Comprometido = saídas ainda não pagas (faturas, parcelas e fixas até ${S.hz} meses). Livre = reservas − comprometido. A receber, não abatido: ${R(rc)}.</p>
+<div class=card><div class=nav2><a onclick="sm=addM(sm,-1);draw()">‹</a><b>${MN(sm)} · ${mode=='cx'?'caixa':'competência'}</b><a onclick="sm=addM(sm,1);draw()">›</a></div>${pie(d)}</div>
+<div class=card><h3>Evolução mensal</h3>${bars(ms,A)}</div>
+<div class=card><h3>Crédito por banco em ${MN(sm)}</h3>${Object.entries(b).map(([k,v])=>`<div class=it><span class=d>${esc(k)}</span><b>${R(v)}</b></div>`).join('')||'<span class=mu>Nenhum gasto no crédito.</span>'}</div>`};
+
+V.prev=()=>{const A=gen(),c=cur();let mx=c,h='';A.forEach(i=>{if(i[mode]>mx)mx=i[mode]});
+ for(let m=c;m<=mx;m=addM(m,1)){const L=A.filter(i=>i[mode]==m).sort((a,b)=>a.dia-b.dia);if(!L.length)continue;const o=sum(A,m,'s'),e=sum(A,m,'e');
+  h+=`<details class=card ${m==c?'open':''}><summary><b>${MN(m)}</b><span class=bad>−${R(o)}</span><span class=ok>+${R(e)}</span><span>= ${R(e-o)}</span></summary>`+
+  L.map(i=>`<div class=it><input type=checkbox ${pend(i)?'':'checked'} onchange="pg('${i.k}',this.checked)"><span class=mu>${i.dia}</span><span class=d>${esc(i.desc)}${i.cred?' 💳':''}${i.rec?' ↻':''}</span><a class="${i.tipo=='s'?'bad':'ok'}" onclick="ovr('${i.k}')">${i.tipo=='s'?'−':'+'}${R(val(i))}${S.ov[i.k]!=null?'*':''}</a></div>`).join('')+'</details>'}
+ return(h||'<p class=mu>Nada previsto ainda. Lance gastos ou cadastre contas fixas.</p>')+'<p class=mu style="font-size:12px">Marque ✓ ao pagar ou receber. Toque no valor para informar o efetivo (*).  💳 crédito · ↻ fixa.</p>'};
+
+V.lan=()=>{const t=S.tx.find(x=>x.id==ed.tx)||{tipo:'s',forma:'d',data:td(),par:1};
+ return`<div class=card><h3>${ed.tx?'Editar':'Novo'} lançamento</h3>${RD(t.tipo)}${I('ds','Descrição',t.desc)}${I('vl','Valor total (R$)',t.valor,'inputmode=decimal')}${I('dt','',t.data,'type=date')}
+<select id=fm>${O([['d','Débito / Pix / dinheiro'],['c','Crédito']],t.forma)}</select>
+<select id=cc>${O(S.cc.map(c=>[c.id,c.nome+' · '+c.banco]),t.cc)}</select>${I('pr','Parcelas (se crédito)',t.par,'type=number min=1')}${I('ct','Categoria',t.cat,'list=dl')}${DL()}
+<button class=btn onclick=svTx()>Salvar lançamento</button>${CANCEL('tx')}</div>
+<div class=card><h3>Últimos lançamentos</h3>${[...S.tx].sort((a,b)=>b.data.localeCompare(a.data)).slice(0,40).map(t=>`<div class=it><span class=mu>${t.data.slice(8)}/${t.data.slice(5,7)}</span><span class=d>${esc(t.desc)}${t.forma=='c'?' 💳'+(t.par>1?' '+t.par+'x':''):''}</span><b class="${t.tipo=='s'?'bad':'ok'}">${R(t.valor)}</b><a onclick="edit('tx','${t.id}')">✎</a><a onclick="del('tx','${t.id}')">🗑</a></div>`).join('')||'<span class=mu>Nenhum lançamento.</span>'}</div>`};
+function svTx(){const v=num($('#vl').value);if(!$('#ds').value||!(v>0))return alert('Informe descrição e valor.');
+ const o={id:ed.tx||uid(),tipo:TP(),desc:$('#ds').value,valor:v,data:$('#dt').value||td(),forma:$('#fm').value,cc:$('#cc').value,par:Math.max(1,+$('#pr').value||1),cat:$('#ct').value||'Outros'};
+ if(o.forma=='c'&&!S.cc.find(c=>c.id==o.cc))return alert('Cadastre um cartão na aba Cartões.');
+ put('tx',o)}
+
+V.fix=()=>{const r=S.rec.find(x=>x.id==ed.rec)||{tipo:'s',ini:cur()};
+ return`<div class=card><h3>${ed.rec?'Editar':'Nova'} conta fixa ou recorrente</h3>${RD(r.tipo)}${I('rd','Descrição (ex.: aluguel, salário)',r.desc)}${I('rv','Valor mensal (R$)',r.valor,'inputmode=decimal')}${I('rdia','Dia do mês',r.dia,'type=number min=1 max=31')}${I('ri','',r.ini,'type=month')}${I('rn','Parcelas restantes (vazio = sem fim)',r.n||'','type=number min=1')}${I('rc','Categoria',r.cat,'list=dl')}${DL()}
+<button class=btn onclick=svRec()>Salvar</button>${CANCEL('rec')}</div>
+<div class=card><h3>Cadastradas</h3>${LST('rec',r=>`${esc(r.desc)} <span class=mu>dia ${r.dia}${r.n?' · '+r.n+'x':''}</span> <b class="${r.tipo=='s'?'bad':'ok'}">${R(r.valor)}</b>`)}</div>
+<div class=card><h3>Horizonte</h3><p class=mu style="margin:0 0 8px;font-size:13px">Quantos meses à frente contar nas fixas sem fim.</p>${I('hz','',S.hz,'type=number min=1 onchange="S.hz=+this.value||12;save()"')}</div>`};
+function svRec(){const v=num($('#rv').value),d=+$('#rdia').value;if(!$('#rd').value||!(v>0)||!(d>=1&&d<=31))return alert('Informe descrição, valor e dia do mês.');
+ put('rec',{id:ed.rec||uid(),tipo:TP(),desc:$('#rd').value,valor:v,dia:d,ini:$('#ri').value||cur(),n:+$('#rn').value||0,cat:$('#rc').value||'Fixas'})}
+
+V.rsv=()=>{const a=S.ap.find(x=>x.id==ed.ap)||{},grp=f=>{const o={};S.ap.forEach(x=>o[x[f]||'—']=(o[x[f]||'—']||0)+x.saldo);return Object.entries(o).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class=it><span class=d>${esc(k)}</span><b>${R(v)}</b></div>`).join('')||'<span class=mu>—</span>'};
+ return`<div class=card><h3>${ed.ap?'Editar':'Nova'} aplicação</h3>${I('ai','Instituição financeira',a.inst)}${I('at','Tipo (ex.: CDB, Tesouro, poupança)',a.tipo,'list=dt1')}<datalist id=dt1>${['Conta corrente','Poupança','CDB','Tesouro Direto','LCI/LCA','Fundo','Ações','FII','Previdência','Cripto'].map(x=>`<option>${x}</option>`).join('')}</datalist>${I('al','Liquidez (ex.: D+0, D+30, no vencimento)',a.liq,'list=dt2')}<datalist id=dt2>${['D+0','D+1','D+30','D+90','No vencimento','Sem liquidez'].map(x=>`<option>${x}</option>`).join('')}</datalist>${I('as','Saldo atual (R$)',a.saldo,'inputmode=decimal')}
+<button class=btn onclick=svAp()>Salvar aplicação</button>${CANCEL('ap')}</div>
+<div class=card><h3>Aplicações</h3>${LST('ap',x=>`${esc(x.inst)} <span class=mu>${esc(x.tipo||'')} · ${esc(x.liq||'')}</span> <b>${R(x.saldo)}</b>`)}</div>
+<div class=card><h3>Total: ${R(S.ap.reduce((s,x)=>s+x.saldo,0))}</h3><b>Por instituição</b>${grp('inst')}<br><b>Por tipo</b>${grp('tipo')}<br><b>Por liquidez</b>${grp('liq')}</div>`};
+function svAp(){const v=num($('#as').value);if(!$('#ai').value||isNaN(v))return alert('Informe a instituição e o saldo.');put('ap',{id:ed.ap||uid(),inst:$('#ai').value,tipo:$('#at').value,liq:$('#al').value,saldo:v})}
+
+V.cc=()=>{const c=S.cc.find(x=>x.id==ed.cc)||{};
+ return`<div class=card><h3>${ed.cc?'Editar':'Novo'} cartão</h3>${I('cn','Nome (ex.: Visa final 1234, cartão virtual)',c.nome)}${I('cb','Banco',c.banco)}${I('cf','Dia de fechamento fatura',c.fe,'type=number min=1 max=31')}${I('cv','Dia de vencimento',c.ve,'type=number min=1 max=31')}
+<button class=btn onclick=svCc()>Salvar cartão</button>${CANCEL('cc')}</div>
+<div class=card><h3>Cartões</h3>${LST('cc',c=>`${esc(c.nome)} <span class=mu>${esc(c.banco)} · fecha ${c.fe} · vence ${c.ve}</span>`)}</div>`};
+function svCc(){const f=+$('#cf').value,v=+$('#cv').value;if(!$('#cn').value||!$('#cb').value||!f||!v)return alert('Preencha nome, banco, fechamento e vencimento.');put('cc',{id:ed.cc||uid(),nome:$('#cn').value,banco:$('#cb').value,fe:f,ve:v})}
+
+V.dad=()=>`<div class=card><h3>Exportar</h3><button class=btn onclick=csv()>Planilha (CSV para Excel/Numbers)</button><button class=btn onclick=pdf()>PDF do previsto (imprimir → salvar PDF)</button></div>
+<div class=card><h3>Backup</h3><p class=mu style="margin:0 0 8px;font-size:13px">Os dados ficam só neste aparelho. Faça backup com frequência e guarde o arquivo no iCloud Drive.</p><button class=btn onclick=bk()>Baixar backup (.json)</button><label class=mu>Restaurar backup</label><input type=file accept=".json,application/json" onchange="rs(this)"></div>`;
+function dl(n,t,m){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:m}));a.download=n;a.click()}
+function csv(){const A=gen().sort((a,b)=>a[mode].localeCompare(b[mode])||a.dia-b.dia),L=[['Mês caixa','Mês competência','Dia','Descrição','Categoria','Banco','Tipo','Valor','Pago']].concat(A.map(i=>[i.cx,i.cp,i.dia,i.desc,i.cat,i.banco,i.tipo=='s'?'Saída':'Entrada',val(i).toFixed(2).replace('.',','),pend(i)?'Não':'Sim']));
+ dl('previsto.csv','\ufeff'+L.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(';')).join('\n'),'text/csv')}
+function pdf(){tab='prev';draw();document.querySelectorAll('details').forEach(d=>d.open=true);setTimeout(()=>print(),200)}
+function bk(){dl('backup-gastos.json',JSON.stringify(S),'application/json')}
+function rs(f){if(!f.files[0]||!confirm('Substituir os dados atuais pelo backup?'))return;const r=new FileReader();r.onload=()=>{try{S=Object.assign({ap:[],cc:[],tx:[],rec:[],pg:{},ov:{},hz:12},JSON.parse(r.result));save();draw()}catch(e){alert('Arquivo inválido.')}};r.readAsText(f.files[0])}
+
+const T=[['res','Resumo'],['prev','Previsto'],['lan','Lançar'],['fix','Fixas'],['rsv','Reservas'],['cc','Cartões'],['dad','Dados']];
+function draw(){$('#seg').innerHTML=[['cx','Caixa'],['cp','Competência']].map(([k,l])=>`<button class="${mode==k?'on':''}" onclick="mode='${k}';draw()">${l}</button>`).join('');
+ $('#nav').innerHTML=T.map(([k,l])=>`<button class="${tab==k?'on':''}" onclick="tab='${k}';draw();scrollTo(0,0)">${l}</button>`).join('');
+ $('#v').innerHTML=V[tab]()}
+draw();
+</script></body></html>
