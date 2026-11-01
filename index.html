@@ -107,7 +107,8 @@ V.res=()=>{const A=gen(),res=S.ap.reduce((a,x)=>a+x.saldo,0),P=A.filter(pend),
  A.filter(i=>i.tipo=='s'&&i[mode]==sm).forEach(i=>{g[i.cat]=(g[i.cat]||0)+val(i);if(i.cred)b[i.banco||'—']=(b[i.banco||'—']||0)+val(i)});
  const d=Object.entries(g).sort((a,b)=>b[1]-a[1]),ms=[0,1,2,3,4,5].map(n=>addM(sm,n));
  return`<div class=k><div><small>Reservas</small><b>${R(res)}</b></div><div><small>Comprometido</small><b class=bad>${R(com)}</b></div><div><small>Livre</small><b class="${liv>=0?'ok':'bad'}">${R(liv)}</b></div></div>
-<p class=mu style="font-size:12px;margin:0 0 12px">Comprometido = saídas ainda não pagas (faturas, parcelas e fixas até ${S.hz} meses). Livre = reservas − comprometido. A receber, não abatido: ${R(rc)}.</p>
+<div class=k style="grid-template-columns:1fr 1fr"><div><small>A receber (entradas pendentes)</small><b class=ok>${R(rc)}</b></div><div><small>Livre projetado (livre + a receber)</small><b class="${liv+rc>=0?'ok':'bad'}">${R(liv+rc)}</b></div></div>
+<p class=mu style="font-size:12px;margin:0 0 12px">Livre = reservas − saídas pendentes, sem contar renda futura. Livre projetado soma também as entradas ainda não recebidas. Só entra na conta o que não está marcado como pago/recebido (✓ no Previsto).</p>
 <div class=card><div class=nav2><a onclick="sm=addM(sm,-1);draw()">‹</a><b>${MN(sm)} · ${mode=='cx'?'caixa':'competência'}<br><small class=mu>${rg(sm)}</small></b><a onclick="sm=addM(sm,1);draw()">›</a></div>${pie(d)}</div>
 <div class=card><h3>Evolução mensal</h3>${bars(ms,A)}</div>
 <div class=card><h3>Crédito por banco em ${MN(sm)}</h3>${Object.entries(b).map(([k,v])=>`<div class=it><span class=d>${esc(k)}</span><b>${R(v)}</b></div>`).join('')||'<span class=mu>Nenhum gasto no crédito.</span>'}</div>`};
