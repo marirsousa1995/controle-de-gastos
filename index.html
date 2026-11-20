@@ -212,10 +212,11 @@ function parseXp(L){const rows=[],saldos=[],D=[],O=[],RV=/(-)?\s*R\$\s*(-)?\s*[\
  const mv=t=>{const o=[],re=/(-)?\s*R\$\s*(-)?\s*([\d.]+,\d{2})/g;let m;while((m=re.exec(t)))o.push({n:(m[1]||m[2]?-1:1)*num(m[3])});return o};
  L.forEach(l=>{const t=l.t,sd=t.match(/^Saldo dispon[ií]vel:?\s*(.*)$/i);
   if(sd){const v=mv(sd[1])[0];if(v)saldos.push({inst:'XP',tipo:'Conta XP (disponível)',liq:'D+0',saldo:v.n,on:true});return}
-  const d=t.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2})\/(\d{2})\/(\d{4})\s*/);
-  if(d){D.push({l,t:t.slice(d[0].length),dt:d[6]+'-'+d[5]+'-'+d[4]});return}
+  const d=t.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2})\/(\d{2})\/(\d{4}))?\s*/);
+  if(d){D.push({l,t:t.slice(d[0].length),dt:d[4]?d[6]+'-'+d[5]+'-'+d[4]:d[3]+'-'+d[2]+'-'+d[1]});return}
   if(/^(Liq\b|Lan[cç]amentos futuros|N[aã]o h[aá]|Saldo|Proje|Resgates|Termos|Outros|Garantias|Opera)/i.test(t))return;
   O.push({l,t})});
+ for(let i=D.length-1;i>0;i--)if(Math.abs(D[i].l.y-D[i-1].l.y)<6){D[i-1].t+=' '+D[i].t;D[i-1].dt=D[i].dt;D.splice(i,1)}
  const ys=D.map(x=>x.l.y),pitch=ys.length>1?Math.min(...ys.slice(1).map((y,i)=>ys[i]-y)):44,th=Math.max(14,pitch*.6);
  O.forEach(o=>{let b=null,bd=1e9;D.forEach(x=>{const e=Math.abs(x.l.y-o.l.y);if(e<bd){bd=e;b=x}});if(b&&bd<=th)(b.a=b.a||[]).push(o)});
  D.forEach(x=>{let am=mv(x.t),t=x.t.replace(RV,'').trim();const A=x.a||[];
@@ -232,10 +233,10 @@ async function lePdf(file){await ldPdf();const pdf=await pdfjsLib.getDocument({d
   it.sort((a,b)=>b.y-a.y||a.x-b.x);let c=null;it.forEach(x=>{if(c&&Math.abs(c.y-x.y)<3)c.i.push(x);else{c={y:x.y,i:[x]};L.push(c)}})}
  if(!L.length)throw new Error('Este PDF não tem texto selecionável (parece escaneado). Ainda não leio imagens.');
  L.forEach(l=>{l.i.sort((a,b)=>a.x-b.x);l.t=l.i.map(x=>x.s).join(' ').replace(/\s+/g,' ').trim()});
- return L.some(l=>/XP INVESTIMENTOS|Extrato da conta/i.test(l.t))?parseXp(L):parseBrb(L)}
+ const r=L.some(l=>/XP INVESTIMENTOS|Extrato da conta|Saldo dispon[ií]vel|Liq\s+Mov/i.test(l.t))?parseXp(L):parseBrb(L);r.dbg=L.slice(0,18).map(l=>l.t.slice(0,90));return r}
 async function importar(f){const file=f.files[0];f.value='';if(!file)return;
  try{imp=/\.pdf$/i.test(file.name)||file.type=='application/pdf'?await lePdf(file):leCsv(await file.text(),file.name);
-  if(!imp.rows.length&&!imp.saldos.length){imp=null;return alert('Não encontrei lançamentos neste arquivo.')}
+  if(!imp.rows.length&&!imp.saldos.length){const g=imp.dbg,o=imp.origem;imp=null;return alert('Não encontrei lançamentos neste arquivo.'+(g?'\n\nLeitor usado: '+o+'\nTrecho lido (me envie esta mensagem):\n'+g.join('\n'):''))}
   draw();scrollTo(0,0)}catch(e){imp=null;alert(e.message||'Não consegui ler o arquivo.')}}
 function vImp(){const m=imp;
  return`<div class=card><h3>Revisar importação</h3><p class=mu style="margin:0;font-size:13px">${esc(m.origem)}. Desmarque o que não quiser e ajuste as categorias.</p>${m.card?`<label class=mu style="display:block;margin-top:8px">Vencimento da fatura</label><input type=date value="${m.fv}" onchange="imp.fv=this.value">`:''}</div>
